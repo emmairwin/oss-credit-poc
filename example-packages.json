@@ -1,0 +1,47 @@
+[
+  {
+    "name": "requests",
+    "ecosystem": "pypi",
+    "owner": "psf",
+    "repo": "requests",
+    "dependents_count": 500000,
+    "repository_url": "https://github.com/psf/requests",
+    "description": "Python HTTP library - community maintained"
+  },
+  {
+    "name": "curl",
+    "ecosystem": "other",
+    "owner": "curl",
+    "repo": "curl",
+    "dependents_count": 1000000,
+    "repository_url": "https://github.com/curl/curl",
+    "description": "Command line tool for transferring data - critical infrastructure"
+  },
+  {
+    "name": "NumPy",
+    "ecosystem": "pypi",
+    "owner": "numpy",
+    "repo": "numpy",
+    "dependents_count": 800000,
+    "repository_url": "https://github.com/numpy/numpy",
+    "description": "Fundamental package for scientific computing"
+  },
+  {
+    "name": "Redis",
+    "ecosystem": "other",
+    "owner": "redis",
+    "repo": "redis",
+    "dependents_count": 300000,
+    "repository_url": "https://github.com/redis/redis",
+    "description": "In-memory data structure store"
+  },
+  {
+    "name": "nginx",
+    "ecosystem": "other",
+    "owner": "nginx",
+    "repo": "nginx",
+    "dependents_count": 200000,
+    "repository_url": "https://github.com/nginx/nginx",
+    "description": "HTTP and reverse proxy server"
+  }
+]
