@@ -58,7 +58,10 @@ def analyze_org_engagement(
         packages_file: Optional JSON file with custom package list
     """
     load_dotenv()
-    github_token = os.getenv('GITHUB_TOKEN')
+    github_token = os.getenv('GITHUB_TOKEN', '').strip()
+
+    # Check if token looks valid (starts with ghp_ or github_pat_)
+    has_valid_token = github_token.startswith(('ghp_', 'github_pat_'))
 
     # Determine time window
     past_year_only = (time_window_years == 1)
@@ -78,15 +81,15 @@ def analyze_org_engagement(
     # Fetch org members for issue/PR attribution (optional, needs GitHub token)
     org_members = set()
     github = None
-    if github_token:
+    if has_valid_token:
         github = GitHubClient(github_token)
         print("[SETUP] Fetching organization members...")
         org_members = fetch_org_members(github, org_name)
         print(f"  Found {len(org_members)} public org members")
         print()
     else:
-        print("[SETUP] No GITHUB_TOKEN - skipping org member fetch")
-        print("  Issue/PR attribution will not be available")
+        print("[SETUP] No GitHub token configured")
+        print("  Issue/PR attribution by org membership will not be available")
         print()
 
     contribution_analyzer = ContributionAnalyzer(ecosystems, org_name, org_members)
