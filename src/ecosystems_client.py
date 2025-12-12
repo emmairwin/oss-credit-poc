@@ -256,6 +256,32 @@ class EcosystemsClient:
             print(f"  Warning: repos API error for {owner}/{repo}: {e}")
             return []
 
+    def lookup_purl(self, purl: str) -> dict:
+        """Look up a package by purl and get its repository URL.
+
+        Args:
+            purl: Package URL (e.g., 'pkg:pypi/requests@2.31.0')
+
+        Returns:
+            Dict with repository_url and other package info, or empty dict if not found
+        """
+        import urllib.parse
+        url = f"{self.PACKAGES_URL}/packages/lookup"
+        params = {"purl": purl}
+
+        try:
+            response = self.session.get(url, params=params, timeout=30)
+            self.request_count += 1
+
+            if response.status_code != 200:
+                return {}
+
+            return response.json()
+
+        except Exception as e:
+            print(f"  Warning: purl lookup error for {purl}: {e}")
+            return {}
+
     def get_repo_committers(self, owner: str, repo: str, past_year: bool = True) -> list:
         """Get committers for a repository.
 
