@@ -15,7 +15,8 @@ from ecosystems_client import EcosystemsClient
 from contribution_analyzer import ContributionAnalyzer
 from sponsorship_checker import SponsorshipChecker
 from report_generator import ReportGenerator
-from models import PackageResult, ContributionStats
+from models import Package, PackageResult, ContributionStats
+from sbom_parser import parse_sbom
 
 
 def fetch_org_members(github: GitHubClient, org_name: str) -> set:
@@ -45,7 +46,8 @@ def analyze_org_engagement(
     time_window_years: int = 1,
     output_file: str = "results.json",
     max_packages: int = None,
-    packages_file: str = None
+    packages_file: str = None,
+    sbom_file: str = None
 ):
     """Analyze organization's engagement with critical OSS packages.
 
@@ -56,6 +58,7 @@ def analyze_org_engagement(
         output_file: Output file path
         max_packages: Maximum number of packages to analyze (for testing)
         packages_file: Optional JSON file with custom package list
+        sbom_file: Optional SBOM file (CycloneDX or SPDX JSON) to use as package list
     """
     load_dotenv()
     github_token = os.getenv('GITHUB_TOKEN', '').strip()
@@ -94,16 +97,61 @@ def analyze_org_engagement(
     print(f"  Previously sponsored: {len(org_sponsorships.past)} entities")
     print()
     
-    if packages_file:
+    if sbom_file:
+        print(f"Loading packages from SBOM {sbom_file}...")
+        try:
+            sbom_packages = parse_sbom(sbom_file)
+            print(f"  Parsed {len(sbom_packages)} packages from SBOM")
+
+            packages = []
+            skipped = 0
+
+            for sbom_pkg in sbom_packages:
+                # Look up package in ecosyste.ms to get GitHub repo
+                pkg_info = ecosystems.lookup_package(sbom_pkg.ecosystem, sbom_pkg.name)
+
+                if not pkg_info:
+                    skipped += 1
+                    continue
+
+                repo_url = pkg_info.get('repository_url', '')
+                if not repo_url or 'github.com' not in repo_url:
+                    skipped += 1
+                    continue
+
+                parsed = ecosystems.parse_github_url(repo_url)
+                if not parsed:
+                    skipped += 1
+                    continue
+
+                owner, repo = parsed
+
+                packages.append(Package(
+                    name=sbom_pkg.name,
+                    ecosystem=sbom_pkg.ecosystem,
+                    owner=owner,
+                    repo=repo,
+                    dependents_count=pkg_info.get('dependent_repos_count', 0),
+                    repository_url=repo_url
+                ))
+
+            print(f"  Resolved {len(packages)} packages to GitHub repos")
+            if skipped > 0:
+                print(f"  Skipped {skipped} packages (no GitHub repo found)")
+
+        except Exception as e:
+            print(f"  Error: {e}")
+            sys.exit(1)
+    elif packages_file:
         print(f"Loading packages from {packages_file}...")
         try:
             with open(packages_file, 'r') as f:
                 packages_data = json.load(f)
-            
+
             # Support both array format and object with 'packages' key
             if isinstance(packages_data, dict) and 'packages' in packages_data:
                 packages_data = packages_data['packages']
-            
+
             from models import Package
             packages = []
             for pkg in packages_data:
@@ -120,7 +168,7 @@ def analyze_org_engagement(
                 else:
                     print(f"  Warning: Skipping package missing owner/repo: {pkg}")
                     continue
-                
+
                 packages.append(Package(
                     name=pkg.get('name', repo),
                     ecosystem=pkg.get('ecosystem', 'unknown'),
@@ -129,7 +177,7 @@ def analyze_org_engagement(
                     dependents_count=pkg.get('dependents_count', 0),
                     repository_url=pkg.get('repository_url', f'https://github.com/{owner}/{repo}')
                 ))
-            
+
             print(f"  Loaded {len(packages)} packages from file")
         except Exception as e:
             print(f"  Error: {e}")
@@ -295,6 +343,11 @@ Examples:
         '--packages-file',
         help='JSON file with custom package list (alternative to ecosyste.ms)'
     )
+
+    parser.add_argument(
+        '--sbom',
+        help='SBOM file (CycloneDX or SPDX JSON) to use as package list'
+    )
     
     args = parser.parse_args()
     
@@ -305,7 +358,8 @@ Examples:
             time_window_years=args.years,
             output_file=args.output,
             max_packages=args.max_packages,
-            packages_file=args.packages_file
+            packages_file=args.packages_file,
+            sbom_file=args.sbom
         )
     except KeyboardInterrupt:
         print("\n\nAnalysis interrupted by user")

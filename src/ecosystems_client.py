@@ -256,6 +256,33 @@ class EcosystemsClient:
             print(f"  Warning: repos API error for {owner}/{repo}: {e}")
             return []
 
+    def lookup_package(self, registry: str, name: str) -> dict:
+        """Look up a package and get its repository URL.
+
+        Args:
+            registry: Registry name (e.g., 'npmjs.org', 'pypi.org')
+            name: Package name
+
+        Returns:
+            Dict with repository_url and other package info, or empty dict if not found
+        """
+        # URL encode the package name (handle scoped packages like @scope/name)
+        encoded_name = name.replace("/", "%2F")
+        url = f"{self.PACKAGES_URL}/registries/{registry}/packages/{encoded_name}"
+
+        try:
+            response = self.session.get(url, timeout=30)
+            self.request_count += 1
+
+            if response.status_code != 200:
+                return {}
+
+            return response.json()
+
+        except Exception as e:
+            print(f"  Warning: package lookup error for {registry}/{name}: {e}")
+            return {}
+
     def get_repo_committers(self, owner: str, repo: str, past_year: bool = True) -> list:
         """Get committers for a repository.
 

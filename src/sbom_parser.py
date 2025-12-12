@@ -1,9 +1,9 @@
 """SBOM parser for extracting package information."""
 
-import json
-import re
 from typing import List, Optional
 from dataclasses import dataclass
+from lib4sbom.parser import SBOMParser
+from packageurl import PackageURL
 
 
 @dataclass
@@ -13,38 +13,6 @@ class SBOMPackage:
     version: Optional[str]
     ecosystem: str
     purl: Optional[str] = None
-
-
-def parse_purl(purl: str) -> Optional[dict]:
-    """Parse a Package URL (purl) into components.
-
-    Args:
-        purl: Package URL like pkg:npm/lodash@4.17.21
-
-    Returns:
-        Dict with type, namespace, name, version or None if invalid
-    """
-    if not purl or not purl.startswith("pkg:"):
-        return None
-
-    # Format: pkg:type/namespace/name@version?qualifiers#subpath
-    # or: pkg:type/name@version
-    match = re.match(
-        r"pkg:([^/]+)/(?:([^/]+)/)?([^@?#]+)(?:@([^?#]+))?",
-        purl
-    )
-
-    if not match:
-        return None
-
-    pkg_type, namespace, name, version = match.groups()
-
-    return {
-        "type": pkg_type,
-        "namespace": namespace,
-        "name": name,
-        "version": version,
-    }
 
 
 def purl_type_to_ecosystem(purl_type: str) -> str:
@@ -72,98 +40,49 @@ def purl_type_to_ecosystem(purl_type: str) -> str:
     return mapping.get(purl_type.lower(), purl_type)
 
 
-def parse_cyclonedx(data: dict) -> List[SBOMPackage]:
-    """Parse CycloneDX SBOM format.
+def parse_sbom(filepath: str) -> List[SBOMPackage]:
+    """Parse an SBOM file using lib4sbom.
 
     Args:
-        data: Parsed JSON data from CycloneDX SBOM
+        filepath: Path to SBOM file (CycloneDX or SPDX in JSON, XML, YAML, etc.)
 
     Returns:
         List of SBOMPackage objects
     """
+    parser = SBOMParser()
+    parser.parse_file(filepath)
+
     packages = []
-    components = data.get("components", [])
 
-    for component in components:
-        # Skip non-library components
-        comp_type = component.get("type", "library")
-        if comp_type not in ("library", "framework"):
-            continue
-
-        name = component.get("name")
+    for pkg_data in parser.get_packages():
+        name = pkg_data.get("name")
         if not name:
             continue
 
-        version = component.get("version")
-        purl = component.get("purl")
+        version = pkg_data.get("version")
 
-        # Try to get ecosystem from purl first
-        ecosystem = None
-        if purl:
-            parsed = parse_purl(purl)
-            if parsed:
-                ecosystem = purl_type_to_ecosystem(parsed["type"])
-                # For namespaced packages (like @scope/name in npm)
-                if parsed["namespace"]:
-                    name = f"{parsed['namespace']}/{parsed['name']}"
-                else:
-                    name = parsed["name"]
-
-        # Fall back to bom-ref or group for ecosystem hints
-        if not ecosystem:
-            bom_ref = component.get("bom-ref", "")
-            if "npm" in bom_ref.lower():
-                ecosystem = "npmjs.org"
-            elif "pypi" in bom_ref.lower():
-                ecosystem = "pypi.org"
-            else:
-                ecosystem = "unknown"
-
-        packages.append(SBOMPackage(
-            name=name,
-            version=version,
-            ecosystem=ecosystem,
-            purl=purl
-        ))
-
-    return packages
-
-
-def parse_spdx(data: dict) -> List[SBOMPackage]:
-    """Parse SPDX SBOM format (JSON).
-
-    Args:
-        data: Parsed JSON data from SPDX SBOM
-
-    Returns:
-        List of SBOMPackage objects
-    """
-    packages = []
-    spdx_packages = data.get("packages", [])
-
-    for pkg in spdx_packages:
-        name = pkg.get("name")
-        if not name:
-            continue
-
-        version = pkg.get("versionInfo")
-
-        # Try to get ecosystem from external refs
-        ecosystem = "unknown"
+        # Extract purl from externalreference list
         purl = None
-
-        for ref in pkg.get("externalRefs", []):
-            if ref.get("referenceType") == "purl":
-                purl = ref.get("referenceLocator")
-                parsed = parse_purl(purl)
-                if parsed:
-                    ecosystem = purl_type_to_ecosystem(parsed["type"])
-                    if parsed["namespace"]:
-                        name = f"{parsed['namespace']}/{parsed['name']}"
-                    else:
-                        name = parsed["name"]
+        for ref in pkg_data.get("externalreference", []):
+            if len(ref) >= 3 and ref[1] == "purl":
+                purl = ref[2]
                 break
 
+        ecosystem = "unknown"
+
+        # Try to get ecosystem from purl
+        if purl:
+            try:
+                parsed = PackageURL.from_string(purl)
+                ecosystem = purl_type_to_ecosystem(parsed.type)
+                # For namespaced packages, include namespace in name
+                if parsed.namespace:
+                    name = f"{parsed.namespace}/{parsed.name}"
+                else:
+                    name = parsed.name
+            except ValueError:
+                pass
+
         packages.append(SBOMPackage(
             name=name,
             version=version,
@@ -172,33 +91,3 @@ def parse_spdx(data: dict) -> List[SBOMPackage]:
         ))
 
     return packages
-
-
-def parse_sbom(filepath: str) -> List[SBOMPackage]:
-    """Parse an SBOM file (auto-detects format).
-
-    Args:
-        filepath: Path to SBOM JSON file
-
-    Returns:
-        List of SBOMPackage objects
-
-    Raises:
-        ValueError: If format cannot be detected or is unsupported
-    """
-    with open(filepath, 'r') as f:
-        data = json.load(f)
-
-    # Detect format
-    if "bomFormat" in data and data.get("bomFormat") == "CycloneDX":
-        return parse_cyclonedx(data)
-    elif "spdxVersion" in data:
-        return parse_spdx(data)
-    elif "components" in data:
-        # Assume CycloneDX without bomFormat field
-        return parse_cyclonedx(data)
-    elif "packages" in data:
-        # Assume SPDX without spdxVersion field
-        return parse_spdx(data)
-    else:
-        raise ValueError("Unknown SBOM format. Supported: CycloneDX, SPDX (JSON)")
