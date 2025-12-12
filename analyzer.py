@@ -59,55 +59,43 @@ def analyze_org_engagement(
     """
     load_dotenv()
     github_token = os.getenv('GITHUB_TOKEN', '').strip()
-
-    # Check if token looks valid (starts with ghp_ or github_pat_)
     has_valid_token = github_token.startswith(('ghp_', 'github_pat_'))
 
-    # Determine time window
     past_year_only = (time_window_years == 1)
     time_label = "past year" if past_year_only else "all time"
 
-    print(f"\nStarting OSS Engagement Analysis")
+    print(f"\nOSS Engagement Analysis")
     print(f"Organization: {org_name}")
     print(f"Email Domain: {email_domain}")
     print(f"Time Window: {time_label}")
-    print(f"Output File: {output_file}")
+    print(f"Output: {output_file}")
     print()
 
-    # Initialize clients
     ecosystems = EcosystemsClient()
     sponsorship_checker = SponsorshipChecker(ecosystems)
 
-    # Fetch org members for issue/PR attribution (optional, needs GitHub token)
     org_members = set()
     github = None
     if has_valid_token:
         github = GitHubClient(github_token)
-        print("[SETUP] Fetching organization members...")
+        print("Fetching organization members...")
         org_members = fetch_org_members(github, org_name)
-        print(f"  Found {len(org_members)} public org members")
+        print(f"  Found {len(org_members)} public members")
         print()
     else:
-        print("[SETUP] No GitHub token configured")
-        print("  Issue/PR attribution by org membership will not be available")
+        print("No GitHub token - issue/PR attribution will use email domain only")
         print()
 
     contribution_analyzer = ContributionAnalyzer(ecosystems, org_name, org_members)
     
-    # ─────────────────────────────────────────────────────────────
-    # PHASE 1: Fetch organization's sponsorships
-    # ─────────────────────────────────────────────────────────────
-    print("[PHASE 1] Fetching organization sponsorships...")
+    print("Fetching organization sponsorships...")
     org_sponsorships = sponsorship_checker.get_org_sponsorships(org_name)
     print(f"  Currently sponsoring: {len(org_sponsorships.current)} entities")
     print(f"  Previously sponsored: {len(org_sponsorships.past)} entities")
     print()
     
-    # ─────────────────────────────────────────────────────────────
-    # PHASE 2: Fetch critical packages
-    # ─────────────────────────────────────────────────────────────
     if packages_file:
-        print(f"[PHASE 2] Loading packages from {packages_file}...")
+        print(f"Loading packages from {packages_file}...")
         try:
             with open(packages_file, 'r') as f:
                 packages_data = json.load(f)
@@ -144,24 +132,18 @@ def analyze_org_engagement(
             
             print(f"  Loaded {len(packages)} packages from file")
         except Exception as e:
-            print(f"  ERROR loading packages file: {e}")
+            print(f"  Error: {e}")
             sys.exit(1)
     else:
-        print("[PHASE 2] Fetching critical packages from ecosyste.ms...")
+        print("Fetching critical packages from ecosyste.ms...")
         packages = ecosystems.fetch_critical_packages()
-        print(f"  Total GitHub packages found: {len(packages)}")
     
     if max_packages and len(packages) > max_packages:
-        print(f"  Limiting analysis to first {max_packages} packages (testing mode)")
+        print(f"  Limiting to first {max_packages} packages")
         packages = packages[:max_packages]
-    
+
     print()
-    
-    # ─────────────────────────────────────────────────────────────
-    # PHASE 3: Analyze each package
-    # ─────────────────────────────────────────────────────────────
-    print(f"[PHASE 3] Analyzing {len(packages)} packages...")
-    print("This may take several hours depending on API rate limits.")
+    print(f"Analyzing {len(packages)} packages...")
     print()
     
     results = []
@@ -237,10 +219,7 @@ def analyze_org_engagement(
     print(f"Total API requests - GitHub: {github_reqs}, ecosyste.ms: {ecosystems.request_count}")
     print()
     
-    # ─────────────────────────────────────────────────────────────
-    # PHASE 4: Generate report
-    # ─────────────────────────────────────────────────────────────
-    print("[PHASE 4] Generating report...")
+    print("Generating report...")
     report = ReportGenerator.generate_report(
         results,
         org_name,

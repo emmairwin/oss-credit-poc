@@ -88,10 +88,7 @@ class ReportGenerator:
             
             "total_commits": sum(r.total_contributions.commits for r in results),
             "total_prs_opened": sum(r.total_contributions.pull_requests_opened for r in results),
-            "total_prs_merged": sum(r.total_contributions.pull_requests_merged for r in results),
             "total_issues_opened": sum(r.total_contributions.issues_opened for r in results),
-            "total_issue_comments": sum(r.total_contributions.issue_comments for r in results),
-            "total_pr_review_comments": sum(r.total_contributions.pr_review_comments for r in results),
             
             "unique_contributors": len(all_contributors),
             
@@ -119,56 +116,35 @@ class ReportGenerator:
         """
         summary = report.summary
         
-        print("\n" + "=" * 70)
-        print(f"OSS ENGAGEMENT ANALYSIS: {summary['organization']}")
-        print("=" * 70)
-        print(f"Email Domain: {summary['email_domain']}")
-        print(f"Time Window: {summary['time_window_years']} year(s)")
-        print(f"Analysis Date: {summary['analysis_date']}")
+        years = summary['time_window_years']
+        time_label = "past year" if years == 1 else "all time"
+
+        print()
+        print(f"OSS Engagement: {summary['organization']}")
+        print(f"Email domain: {summary['email_domain']}")
+        print(f"Time window: {time_label}")
         print()
         
-        print("PACKAGE STATISTICS")
-        print("-" * 70)
-        print(f"Total Critical Packages Analyzed: {summary['total_critical_packages']}")
-        print(f"Packages with Contributions: {summary['packages_with_contributions']}")
-        print(f"Packages with Active Sponsorship: {summary['packages_with_active_sponsorship']}")
-        print(f"Packages with Past Sponsorship: {summary['packages_with_past_sponsorship']}")
-        print(f"Packages with No Engagement: {summary['packages_with_no_engagement']}")
+        print(f"Packages analyzed: {summary['total_critical_packages']}")
+        print(f"  With contributions: {summary['packages_with_contributions']}")
+        print(f"  With sponsorship: {summary['packages_with_active_sponsorship']}")
+        print(f"  No engagement: {summary['packages_with_no_engagement']}")
+        print()
+
+        print(f"Contributions: {summary['total_commits']} commits, {summary['total_prs_opened']} PRs, {summary['total_issues_opened']} issues")
+        print(f"Contributors: {summary['unique_contributors']}")
         print()
         
-        print("ENGAGEMENT BREAKDOWN")
-        print("-" * 70)
-        breakdown = summary['engagement_breakdown']
-        print(f"Full Engagement (Code + Money): {breakdown['full_engagement']}")
-        print(f"Code Only: {breakdown['code_only']}")
-        print(f"Money Only: {breakdown['money_only']}")
-        print(f"No Engagement: {breakdown['no_engagement']}")
-        print()
-        
-        print("CONTRIBUTION STATISTICS")
-        print("-" * 70)
-        print(f"Total Commits: {summary['total_commits']}")
-        print(f"Total PRs Opened: {summary['total_prs_opened']}")
-        print(f"Total PRs Merged: {summary['total_prs_merged']}")
-        print(f"Total Issues Opened: {summary['total_issues_opened']}")
-        print(f"Total Issue Comments: {summary['total_issue_comments']}")
-        print(f"Total PR Review Comments: {summary['total_pr_review_comments']}")
-        print(f"Unique Contributors: {summary['unique_contributors']}")
-        print()
-        
-        print("TOP CONTRIBUTORS (by package count)")
-        print("-" * 70)
-        for i, contributor in enumerate(report.top_contributors[:10], 1):
-            print(f"{i}. {contributor['email']}")
-            print(f"   Packages: {contributor['packages_count']}")
-            contrib = contributor['contributions']
-            print(f"   Total Activity: {contrib['total_activity']} "
-                  f"(commits: {contrib['commits']}, PRs: {contrib['pull_requests_opened']}, "
-                  f"issues: {contrib['issues_opened']})")
-        
-        print()
-        print("DETAILED CONTRIBUTIONS BY PACKAGE")
-        print("-" * 70)
+        if report.top_contributors:
+            print("Top contributors:")
+            for i, contributor in enumerate(report.top_contributors[:10], 1):
+                contrib = contributor['contributions']
+                print(f"  {contributor['email']}")
+                print(f"    {contributor['packages_count']} packages, "
+                      f"{contrib['commits']} commits, {contrib['pull_requests_opened']} PRs")
+            print()
+
+        print("Packages with contributions:")
         
         # Show packages with actual contributions
         packages_with_contribs = [
@@ -176,40 +152,28 @@ class ReportGenerator:
             if r.has_contributions
         ]
         
-        if packages_with_contribs:
-            for result in packages_with_contribs[:20]:  # Limit to first 20
+        if not packages_with_contribs:
+            print("  (none)")
+        else:
+            for result in packages_with_contribs[:20]:
                 pkg = result.package
-                print(f"\n{pkg.owner}/{pkg.repo} ({pkg.ecosystem})")
-                print(f"  Sponsorship: {result.sponsorship.status}")
-                print(f"  Contributors ({result.unique_contributor_count}):")
-                
-                # Sort contributors by total activity
                 sorted_contribs = sorted(
                     result.contributors.items(),
                     key=lambda x: x[1].total_activity(),
                     reverse=True
                 )
-                
-                for email, stats in sorted_contribs[:5]:  # Show top 5 per package
-                    print(f"    • {email}")
-                    details = []
-                    if stats.commits > 0:
-                        details.append(f"{stats.commits} commits")
-                    if stats.pull_requests_opened > 0:
-                        details.append(f"{stats.pull_requests_opened} PRs")
-                    if stats.pull_requests_merged > 0:
-                        details.append(f"({stats.pull_requests_merged} merged)")
-                    if stats.issues_opened > 0:
-                        details.append(f"{stats.issues_opened} issues")
-                    if stats.issue_comments > 0:
-                        details.append(f"{stats.issue_comments} comments")
-                    if stats.pr_review_comments > 0:
-                        details.append(f"{stats.pr_review_comments} reviews")
-                    print(f"      {', '.join(details)}")
-            
+                top_email = sorted_contribs[0][0] if sorted_contribs else ""
+                top_stats = sorted_contribs[0][1] if sorted_contribs else None
+
+                details = []
+                if top_stats:
+                    if top_stats.commits > 0:
+                        details.append(f"{top_stats.commits} commits")
+                    if top_stats.pull_requests_opened > 0:
+                        details.append(f"{top_stats.pull_requests_opened} PRs")
+
+                print(f"  {pkg.owner}/{pkg.repo}: {top_email} ({', '.join(details)})")
+
             if len(packages_with_contribs) > 20:
-                print(f"\n  ... and {len(packages_with_contribs) - 20} more packages with contributions")
-        else:
-            print("  No contributions found")
-        
-        print("\n" + "=" * 70)
+                print(f"  ... and {len(packages_with_contribs) - 20} more")
+        print()
