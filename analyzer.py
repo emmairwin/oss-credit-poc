@@ -61,7 +61,7 @@ def analyze_org_engagement(
     github = GitHubClient(github_token)
     ecosystems = EcosystemsClient()
     contribution_analyzer = ContributionAnalyzer(github, org_name)
-    sponsorship_checker = SponsorshipChecker(github)
+    sponsorship_checker = SponsorshipChecker(ecosystems)
     
     # ─────────────────────────────────────────────────────────────
     # PHASE 1: Fetch organization's sponsorships
@@ -193,7 +193,7 @@ def analyze_org_engagement(
             print(f"  Progress: {i+1}/{len(packages)} packages | "
                   f"Elapsed: {elapsed/60:.1f}m | "
                   f"Est. remaining: {remaining/60:.1f}m")
-            print(f"  API requests: {github.request_count}")
+            print(f"  API requests - GitHub: {github.request_count}, ecosyste.ms: {ecosystems.request_count}")
             print()
         
         # Rate limiting - be nice to APIs
@@ -201,7 +201,7 @@ def analyze_org_engagement(
     
     print()
     print(f"Analysis complete! Total time: {(time.time() - start_time)/60:.1f} minutes")
-    print(f"Total API requests: {github.request_count}")
+    print(f"Total API requests - GitHub: {github.request_count}, ecosyste.ms: {ecosystems.request_count}")
     print()
     
     # ─────────────────────────────────────────────────────────────
