@@ -73,8 +73,12 @@ def analyze_org_engagement(
             skipped = 0
 
             for sbom_pkg in sbom_packages:
-                # Look up package in ecosyste.ms to get GitHub repo
-                pkg_info = ecosystems.lookup_package(sbom_pkg.ecosystem, sbom_pkg.name)
+                if not sbom_pkg.purl:
+                    skipped += 1
+                    continue
+
+                # Look up package by purl to get GitHub repo
+                pkg_info = ecosystems.lookup_purl(sbom_pkg.purl)
 
                 if not pkg_info:
                     skipped += 1
@@ -94,7 +98,7 @@ def analyze_org_engagement(
 
                 packages.append(Package(
                     name=sbom_pkg.name,
-                    ecosystem=sbom_pkg.ecosystem,
+                    ecosystem=pkg_info.get('ecosystem', sbom_pkg.ecosystem),
                     owner=owner,
                     repo=repo,
                     dependents_count=pkg_info.get('dependent_repos_count', 0),

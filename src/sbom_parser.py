@@ -11,33 +11,8 @@ class SBOMPackage:
     """Package extracted from an SBOM."""
     name: str
     version: Optional[str]
-    ecosystem: str
     purl: Optional[str] = None
-
-
-def purl_type_to_ecosystem(purl_type: str) -> str:
-    """Map purl type to ecosyste.ms registry name.
-
-    Args:
-        purl_type: Package URL type (npm, pypi, maven, etc.)
-
-    Returns:
-        ecosyste.ms registry name
-    """
-    mapping = {
-        "npm": "npmjs.org",
-        "pypi": "pypi.org",
-        "gem": "rubygems.org",
-        "cargo": "crates.io",
-        "nuget": "nuget.org",
-        "maven": "repo1.maven.org",
-        "golang": "proxy.golang.org",
-        "composer": "packagist.org",
-        "cocoapods": "cocoapods.org",
-        "hex": "hex.pm",
-        "pub": "pub.dev",
-    }
-    return mapping.get(purl_type.lower(), purl_type)
+    ecosystem: str = "unknown"
 
 
 def parse_sbom(filepath: str) -> List[SBOMPackage]:
@@ -68,14 +43,10 @@ def parse_sbom(filepath: str) -> List[SBOMPackage]:
                 purl = ref[2]
                 break
 
-        ecosystem = "unknown"
-
-        # Try to get ecosystem from purl
+        # Get clean name from purl if available
         if purl:
             try:
                 parsed = PackageURL.from_string(purl)
-                ecosystem = purl_type_to_ecosystem(parsed.type)
-                # For namespaced packages, include namespace in name
                 if parsed.namespace:
                     name = f"{parsed.namespace}/{parsed.name}"
                 else:
@@ -86,7 +57,6 @@ def parse_sbom(filepath: str) -> List[SBOMPackage]:
         packages.append(SBOMPackage(
             name=name,
             version=version,
-            ecosystem=ecosystem,
             purl=purl
         ))
 

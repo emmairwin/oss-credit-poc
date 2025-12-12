@@ -7,29 +7,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from sbom_parser import parse_sbom, purl_type_to_ecosystem, SBOMPackage
-
-
-class TestPurlTypeToEcosystem:
-    """Tests for purl type to ecosystem mapping."""
-
-    def test_npm_mapping(self):
-        assert purl_type_to_ecosystem("npm") == "npmjs.org"
-
-    def test_pypi_mapping(self):
-        assert purl_type_to_ecosystem("pypi") == "pypi.org"
-
-    def test_cargo_mapping(self):
-        assert purl_type_to_ecosystem("cargo") == "crates.io"
-
-    def test_maven_mapping(self):
-        assert purl_type_to_ecosystem("maven") == "repo1.maven.org"
-
-    def test_unknown_type(self):
-        assert purl_type_to_ecosystem("unknown") == "unknown"
-
-    def test_case_insensitive(self):
-        assert purl_type_to_ecosystem("NPM") == "npmjs.org"
+from sbom_parser import parse_sbom, SBOMPackage
 
 
 class TestParseSBOMCycloneDX:
@@ -69,7 +47,7 @@ class TestParseSBOMCycloneDX:
         assert "lodash" in pkg_names
 
         requests_pkg = next(p for p in packages if p.name == "requests")
-        assert requests_pkg.ecosystem == "pypi.org"
+        assert requests_pkg.purl == "pkg:pypi/requests@2.31.0"
         assert requests_pkg.version == "2.31.0"
 
     def test_parse_scoped_npm_package(self):
@@ -96,7 +74,7 @@ class TestParseSBOMCycloneDX:
 
         assert len(packages) == 1
         assert packages[0].name == "@babel/core"
-        assert packages[0].ecosystem == "npmjs.org"
+        assert packages[0].purl == "pkg:npm/%40babel/core@7.22.0"
 
 
 class TestParseSBOMSPDX:
@@ -141,7 +119,7 @@ class TestParseSBOMSPDX:
         assert len(packages) == 1
         assert packages[0].name == "numpy"
         assert packages[0].version == "1.24.0"
-        assert packages[0].ecosystem == "pypi.org"
+        assert packages[0].purl == "pkg:pypi/numpy@1.24.0"
 
 
 class TestParseSBOMEmpty:
