@@ -5,7 +5,6 @@ import sys
 import json
 import argparse
 import time
-from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 # Add src to path
@@ -19,6 +18,27 @@ from report_generator import ReportGenerator
 from models import PackageResult, ContributionStats
 
 
+def fetch_org_members(github: GitHubClient, org_name: str) -> set:
+    """Fetch public members of a GitHub organization.
+
+    Args:
+        github: GitHub API client
+        org_name: Organization name
+
+    Returns:
+        Set of lowercase usernames
+    """
+    members = set()
+    try:
+        members_data = github.rest_paginate(f"/orgs/{org_name}/members", max_pages=50)
+        for member in members_data:
+            if member and 'login' in member:
+                members.add(member['login'].lower())
+    except Exception as e:
+        print(f"  Warning: Could not fetch org members: {e}")
+    return members
+
+
 def analyze_org_engagement(
     org_name: str,
     email_domain: str,
@@ -28,40 +48,48 @@ def analyze_org_engagement(
     packages_file: str = None
 ):
     """Analyze organization's engagement with critical OSS packages.
-    
+
     Args:
         org_name: GitHub organization name
         email_domain: Email domain for attribution
-        time_window_years: Number of years to analyze
+        time_window_years: Number of years to analyze (1 = past year, >1 = all time)
         output_file: Output file path
         max_packages: Maximum number of packages to analyze (for testing)
         packages_file: Optional JSON file with custom package list
     """
-    # Load environment variables
     load_dotenv()
     github_token = os.getenv('GITHUB_TOKEN')
-    
-    if not github_token:
-        print("ERROR: GITHUB_TOKEN environment variable not set")
-        print("Please create a .env file with your GitHub token")
-        sys.exit(1)
-    
-    # Calculate time window
-    since_date = datetime.utcnow() - timedelta(days=365 * time_window_years)
-    since_date_iso = since_date.isoformat() + "Z"
-    
+
+    # Determine time window
+    past_year_only = (time_window_years == 1)
+    time_label = "past year" if past_year_only else "all time"
+
     print(f"\nStarting OSS Engagement Analysis")
     print(f"Organization: {org_name}")
     print(f"Email Domain: {email_domain}")
-    print(f"Time Window: {time_window_years} year(s) (since {since_date.strftime('%Y-%m-%d')})")
+    print(f"Time Window: {time_label}")
     print(f"Output File: {output_file}")
     print()
-    
+
     # Initialize clients
-    github = GitHubClient(github_token)
     ecosystems = EcosystemsClient()
-    contribution_analyzer = ContributionAnalyzer(github, org_name)
     sponsorship_checker = SponsorshipChecker(ecosystems)
+
+    # Fetch org members for issue/PR attribution (optional, needs GitHub token)
+    org_members = set()
+    github = None
+    if github_token:
+        github = GitHubClient(github_token)
+        print("[SETUP] Fetching organization members...")
+        org_members = fetch_org_members(github, org_name)
+        print(f"  Found {len(org_members)} public org members")
+        print()
+    else:
+        print("[SETUP] No GITHUB_TOKEN - skipping org member fetch")
+        print("  Issue/PR attribution will not be available")
+        print()
+
+    contribution_analyzer = ContributionAnalyzer(ecosystems, org_name, org_members)
     
     # ─────────────────────────────────────────────────────────────
     # PHASE 1: Fetch organization's sponsorships
@@ -145,7 +173,7 @@ def analyze_org_engagement(
                 package.owner,
                 package.repo,
                 email_domain,
-                since_date_iso
+                past_year=past_year_only
             )
             
             # Aggregate total contributions
@@ -193,7 +221,8 @@ def analyze_org_engagement(
             print(f"  Progress: {i+1}/{len(packages)} packages | "
                   f"Elapsed: {elapsed/60:.1f}m | "
                   f"Est. remaining: {remaining/60:.1f}m")
-            print(f"  API requests - GitHub: {github.request_count}, ecosyste.ms: {ecosystems.request_count}")
+            github_reqs = github.request_count if github else 0
+            print(f"  API requests - GitHub: {github_reqs}, ecosyste.ms: {ecosystems.request_count}")
             print()
         
         # Rate limiting - be nice to APIs
@@ -201,7 +230,8 @@ def analyze_org_engagement(
     
     print()
     print(f"Analysis complete! Total time: {(time.time() - start_time)/60:.1f} minutes")
-    print(f"Total API requests - GitHub: {github.request_count}, ecosyste.ms: {ecosystems.request_count}")
+    github_reqs = github.request_count if github else 0
+    print(f"Total API requests - GitHub: {github_reqs}, ecosyste.ms: {ecosystems.request_count}")
     print()
     
     # ─────────────────────────────────────────────────────────────
