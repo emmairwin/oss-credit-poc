@@ -13,18 +13,14 @@ fi
 if [ ! -f ".env" ]; then
     echo "Creating .env file from template..."
     cp .env.example .env
-    echo ""
-    echo "⚠️  Please edit .env and add your GITHUB_TOKEN before running the analyzer"
-    echo ""
-    exit 1
 fi
 
-# Check if GITHUB_TOKEN is set
+# Check if GITHUB_TOKEN is set (optional - only needed for org member lookup)
 if ! grep -q "GITHUB_TOKEN=ghp_\|GITHUB_TOKEN=github_pat_" .env 2>/dev/null; then
-    echo "⚠️  GITHUB_TOKEN not configured in .env file"
-    echo "Please edit .env and add your GitHub Personal Access Token"
+    echo "Note: GITHUB_TOKEN not configured in .env file"
+    echo "Issue/PR attribution by org membership will not be available"
+    echo "Commit attribution by email domain will still work"
     echo ""
-    exit 1
 fi
 
 # Run the analyzer
