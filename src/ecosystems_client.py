@@ -13,6 +13,8 @@ class EcosystemsClient:
     PACKAGES_URL = "https://packages.ecosyste.ms/api/v1"
     SPONSORS_URL = "https://sponsors.ecosyste.ms/api/v1"
     REPOS_URL = "https://repos.ecosyste.ms/api/v1"
+    COMMITS_URL = "https://commits.ecosyste.ms/api/v1"
+    ISSUES_URL = "https://issues.ecosyste.ms/api/v1"
     USER_AGENT = "oss-credit-analyzer/1.0 (emma.irwin@gmail.com)"
 
     def __init__(self):
@@ -253,6 +255,101 @@ class EcosystemsClient:
         except Exception as e:
             print(f"  Warning: repos API error for {owner}/{repo}: {e}")
             return []
+
+    def get_repo_committers(self, owner: str, repo: str, past_year: bool = True) -> list:
+        """Get committers for a repository.
+
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            past_year: If True, return only past year committers
+
+        Returns:
+            List of committer dicts with name, email, login, count
+        """
+        url = f"{self.COMMITS_URL}/hosts/GitHub/repositories/{owner}%2F{repo}"
+
+        try:
+            response = self.session.get(url, timeout=60)
+            self.request_count += 1
+
+            if response.status_code != 200:
+                return []
+
+            data = response.json()
+
+            if past_year:
+                return data.get("past_year_committers", [])
+            return data.get("committers", [])
+
+        except Exception as e:
+            print(f"  Warning: commits API error for {owner}/{repo}: {e}")
+            return []
+
+    def get_repo_issue_contributors(self, owner: str, repo: str) -> dict:
+        """Get issue and PR contributors for a repository.
+
+        Args:
+            owner: Repository owner
+            repo: Repository name
+
+        Returns:
+            Dict with 'issue_authors' and 'pull_request_authors' mappings
+            of username -> count
+        """
+        url = f"{self.ISSUES_URL}/hosts/GitHub/repositories/{owner}%2F{repo}"
+
+        try:
+            response = self.session.get(url, timeout=60)
+            self.request_count += 1
+
+            if response.status_code != 200:
+                return {"issue_authors": {}, "pull_request_authors": {}}
+
+            data = response.json()
+
+            return {
+                "issue_authors": data.get("issue_authors", {}),
+                "pull_request_authors": data.get("pull_request_authors", {}),
+                "past_year_issue_authors": data.get("past_year_issue_authors", {}),
+                "past_year_pull_request_authors": data.get("past_year_pull_request_authors", {}),
+            }
+
+        except Exception as e:
+            print(f"  Warning: issues API error for {owner}/{repo}: {e}")
+            return {"issue_authors": {}, "pull_request_authors": {}}
+
+    def get_org_maintainers(self, org: str) -> set:
+        """Get maintainers/contributors for a GitHub organization.
+
+        Args:
+            org: GitHub organization name
+
+        Returns:
+            Set of lowercase usernames
+        """
+        url = f"{self.ISSUES_URL}/hosts/GitHub/owners/{org}/maintainers"
+
+        try:
+            response = self.session.get(url, timeout=60)
+            self.request_count += 1
+
+            if response.status_code != 200:
+                return set()
+
+            data = response.json()
+            maintainers = set()
+
+            for item in data.get("maintainers", []):
+                username = item.get("maintainer")
+                if username:
+                    maintainers.add(username.lower())
+
+            return maintainers
+
+        except Exception as e:
+            print(f"  Warning: issues API error for org {org}: {e}")
+            return set()
 
     def get_stats(self) -> dict:
         """Get API usage statistics.

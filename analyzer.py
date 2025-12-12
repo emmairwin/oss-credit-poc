@@ -5,13 +5,10 @@ import sys
 import json
 import argparse
 import time
-from datetime import datetime, timedelta
-from dotenv import load_dotenv
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from github_client import GitHubClient
 from ecosystems_client import EcosystemsClient
 from contribution_analyzer import ContributionAnalyzer
 from sponsorship_checker import SponsorshipChecker
@@ -28,55 +25,43 @@ def analyze_org_engagement(
     packages_file: str = None
 ):
     """Analyze organization's engagement with critical OSS packages.
-    
+
     Args:
         org_name: GitHub organization name
         email_domain: Email domain for attribution
-        time_window_years: Number of years to analyze
+        time_window_years: Number of years to analyze (1 = past year, >1 = all time)
         output_file: Output file path
         max_packages: Maximum number of packages to analyze (for testing)
         packages_file: Optional JSON file with custom package list
     """
-    # Load environment variables
-    load_dotenv()
-    github_token = os.getenv('GITHUB_TOKEN')
-    
-    if not github_token:
-        print("ERROR: GITHUB_TOKEN environment variable not set")
-        print("Please create a .env file with your GitHub token")
-        sys.exit(1)
-    
-    # Calculate time window
-    since_date = datetime.utcnow() - timedelta(days=365 * time_window_years)
-    since_date_iso = since_date.isoformat() + "Z"
-    
-    print(f"\nStarting OSS Engagement Analysis")
+    past_year_only = (time_window_years == 1)
+    time_label = "past year" if past_year_only else "all time"
+
+    print(f"\nOSS Engagement Analysis")
     print(f"Organization: {org_name}")
     print(f"Email Domain: {email_domain}")
-    print(f"Time Window: {time_window_years} year(s) (since {since_date.strftime('%Y-%m-%d')})")
-    print(f"Output File: {output_file}")
+    print(f"Time Window: {time_label}")
+    print(f"Output: {output_file}")
     print()
-    
-    # Initialize clients
-    github = GitHubClient(github_token)
+
     ecosystems = EcosystemsClient()
-    contribution_analyzer = ContributionAnalyzer(github, org_name)
     sponsorship_checker = SponsorshipChecker(ecosystems)
+
+    print("Fetching organization maintainers...")
+    org_members = ecosystems.get_org_maintainers(org_name)
+    print(f"  Found {len(org_members)} maintainers")
+    print()
+
+    contribution_analyzer = ContributionAnalyzer(ecosystems, org_name, org_members)
     
-    # ─────────────────────────────────────────────────────────────
-    # PHASE 1: Fetch organization's sponsorships
-    # ─────────────────────────────────────────────────────────────
-    print("[PHASE 1] Fetching organization sponsorships...")
+    print("Fetching organization sponsorships...")
     org_sponsorships = sponsorship_checker.get_org_sponsorships(org_name)
     print(f"  Currently sponsoring: {len(org_sponsorships.current)} entities")
     print(f"  Previously sponsored: {len(org_sponsorships.past)} entities")
     print()
     
-    # ─────────────────────────────────────────────────────────────
-    # PHASE 2: Fetch critical packages
-    # ─────────────────────────────────────────────────────────────
     if packages_file:
-        print(f"[PHASE 2] Loading packages from {packages_file}...")
+        print(f"Loading packages from {packages_file}...")
         try:
             with open(packages_file, 'r') as f:
                 packages_data = json.load(f)
@@ -113,24 +98,18 @@ def analyze_org_engagement(
             
             print(f"  Loaded {len(packages)} packages from file")
         except Exception as e:
-            print(f"  ERROR loading packages file: {e}")
+            print(f"  Error: {e}")
             sys.exit(1)
     else:
-        print("[PHASE 2] Fetching critical packages from ecosyste.ms...")
+        print("Fetching critical packages from ecosyste.ms...")
         packages = ecosystems.fetch_critical_packages()
-        print(f"  Total GitHub packages found: {len(packages)}")
     
     if max_packages and len(packages) > max_packages:
-        print(f"  Limiting analysis to first {max_packages} packages (testing mode)")
+        print(f"  Limiting to first {max_packages} packages")
         packages = packages[:max_packages]
-    
+
     print()
-    
-    # ─────────────────────────────────────────────────────────────
-    # PHASE 3: Analyze each package
-    # ─────────────────────────────────────────────────────────────
-    print(f"[PHASE 3] Analyzing {len(packages)} packages...")
-    print("This may take several hours depending on API rate limits.")
+    print(f"Analyzing {len(packages)} packages...")
     print()
     
     results = []
@@ -145,7 +124,7 @@ def analyze_org_engagement(
                 package.owner,
                 package.repo,
                 email_domain,
-                since_date_iso
+                past_year=past_year_only
             )
             
             # Aggregate total contributions
@@ -193,7 +172,7 @@ def analyze_org_engagement(
             print(f"  Progress: {i+1}/{len(packages)} packages | "
                   f"Elapsed: {elapsed/60:.1f}m | "
                   f"Est. remaining: {remaining/60:.1f}m")
-            print(f"  API requests - GitHub: {github.request_count}, ecosyste.ms: {ecosystems.request_count}")
+            print(f"  API requests: {ecosystems.request_count}")
             print()
         
         # Rate limiting - be nice to APIs
@@ -201,13 +180,10 @@ def analyze_org_engagement(
     
     print()
     print(f"Analysis complete! Total time: {(time.time() - start_time)/60:.1f} minutes")
-    print(f"Total API requests - GitHub: {github.request_count}, ecosyste.ms: {ecosystems.request_count}")
+    print(f"Total API requests: {ecosystems.request_count}")
     print()
     
-    # ─────────────────────────────────────────────────────────────
-    # PHASE 4: Generate report
-    # ─────────────────────────────────────────────────────────────
-    print("[PHASE 4] Generating report...")
+    print("Generating report...")
     report = ReportGenerator.generate_report(
         results,
         org_name,

@@ -183,6 +183,54 @@ class TestUserAgent:
         assert "oss-credit-analyzer" in client.session.headers["User-Agent"]
 
 
+class TestGetOrgMaintainers:
+    def test_returns_maintainer_usernames(self):
+        client = EcosystemsClient()
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "login": "testorg",
+            "maintainers": [
+                {"maintainer": "User1", "count": 100},
+                {"maintainer": "user2", "count": 50},
+            ]
+        }
+
+        with patch.object(client.session, 'get', return_value=mock_response):
+            result = client.get_org_maintainers("testorg")
+
+        assert "user1" in result
+        assert "user2" in result
+        assert len(result) == 2
+
+    def test_returns_empty_when_404(self):
+        client = EcosystemsClient()
+
+        mock_response = Mock()
+        mock_response.status_code = 404
+
+        with patch.object(client.session, 'get', return_value=mock_response):
+            result = client.get_org_maintainers("nonexistent")
+
+        assert len(result) == 0
+
+    def test_handles_empty_maintainers(self):
+        client = EcosystemsClient()
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "login": "testorg",
+            "maintainers": []
+        }
+
+        with patch.object(client.session, 'get', return_value=mock_response):
+            result = client.get_org_maintainers("testorg")
+
+        assert len(result) == 0
+
+
 class TestRequestCount:
     def test_increments_request_count(self):
         client = EcosystemsClient()
