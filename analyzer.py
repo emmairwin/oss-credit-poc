@@ -5,38 +5,15 @@ import sys
 import json
 import argparse
 import time
-from dotenv import load_dotenv
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from github_client import GitHubClient
 from ecosystems_client import EcosystemsClient
 from contribution_analyzer import ContributionAnalyzer
 from sponsorship_checker import SponsorshipChecker
 from report_generator import ReportGenerator
 from models import PackageResult, ContributionStats
-
-
-def fetch_org_members(github: GitHubClient, org_name: str) -> set:
-    """Fetch public members of a GitHub organization.
-
-    Args:
-        github: GitHub API client
-        org_name: Organization name
-
-    Returns:
-        Set of lowercase usernames
-    """
-    members = set()
-    try:
-        members_data = github.rest_paginate(f"/orgs/{org_name}/members", max_pages=50)
-        for member in members_data:
-            if member and 'login' in member:
-                members.add(member['login'].lower())
-    except Exception as e:
-        print(f"  Warning: Could not fetch org members: {e}")
-    return members
 
 
 def analyze_org_engagement(
@@ -57,10 +34,6 @@ def analyze_org_engagement(
         max_packages: Maximum number of packages to analyze (for testing)
         packages_file: Optional JSON file with custom package list
     """
-    load_dotenv()
-    github_token = os.getenv('GITHUB_TOKEN', '').strip()
-    has_valid_token = github_token.startswith(('ghp_', 'github_pat_'))
-
     past_year_only = (time_window_years == 1)
     time_label = "past year" if past_year_only else "all time"
 
@@ -74,17 +47,10 @@ def analyze_org_engagement(
     ecosystems = EcosystemsClient()
     sponsorship_checker = SponsorshipChecker(ecosystems)
 
-    org_members = set()
-    github = None
-    if has_valid_token:
-        github = GitHubClient(github_token)
-        print("Fetching organization members...")
-        org_members = fetch_org_members(github, org_name)
-        print(f"  Found {len(org_members)} public members")
-        print()
-    else:
-        print("No GitHub token - issue/PR attribution will use email domain only")
-        print()
+    print("Fetching organization maintainers...")
+    org_members = ecosystems.get_org_maintainers(org_name)
+    print(f"  Found {len(org_members)} maintainers")
+    print()
 
     contribution_analyzer = ContributionAnalyzer(ecosystems, org_name, org_members)
     
@@ -206,8 +172,7 @@ def analyze_org_engagement(
             print(f"  Progress: {i+1}/{len(packages)} packages | "
                   f"Elapsed: {elapsed/60:.1f}m | "
                   f"Est. remaining: {remaining/60:.1f}m")
-            github_reqs = github.request_count if github else 0
-            print(f"  API requests - GitHub: {github_reqs}, ecosyste.ms: {ecosystems.request_count}")
+            print(f"  API requests: {ecosystems.request_count}")
             print()
         
         # Rate limiting - be nice to APIs
@@ -215,8 +180,7 @@ def analyze_org_engagement(
     
     print()
     print(f"Analysis complete! Total time: {(time.time() - start_time)/60:.1f} minutes")
-    github_reqs = github.request_count if github else 0
-    print(f"Total API requests - GitHub: {github_reqs}, ecosyste.ms: {ecosystems.request_count}")
+    print(f"Total API requests: {ecosystems.request_count}")
     print()
     
     print("Generating report...")

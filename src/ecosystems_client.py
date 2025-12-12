@@ -319,6 +319,38 @@ class EcosystemsClient:
             print(f"  Warning: issues API error for {owner}/{repo}: {e}")
             return {"issue_authors": {}, "pull_request_authors": {}}
 
+    def get_org_maintainers(self, org: str) -> set:
+        """Get maintainers/contributors for a GitHub organization.
+
+        Args:
+            org: GitHub organization name
+
+        Returns:
+            Set of lowercase usernames
+        """
+        url = f"{self.ISSUES_URL}/hosts/GitHub/owners/{org}/maintainers"
+
+        try:
+            response = self.session.get(url, timeout=60)
+            self.request_count += 1
+
+            if response.status_code != 200:
+                return set()
+
+            data = response.json()
+            maintainers = set()
+
+            for item in data.get("maintainers", []):
+                username = item.get("maintainer")
+                if username:
+                    maintainers.add(username.lower())
+
+            return maintainers
+
+        except Exception as e:
+            print(f"  Warning: issues API error for org {org}: {e}")
+            return set()
+
     def get_stats(self) -> dict:
         """Get API usage statistics.
 
